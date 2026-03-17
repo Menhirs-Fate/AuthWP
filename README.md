@@ -8,6 +8,10 @@ by [Ciaran Gultnieks](https://github.com/CiaranG) and is intended to
 provide essentially the same functionality using `SessionManager` and
 `AuthenticationProvider` introduced in MediaWiki 1.27. In particular:
 
+This repository is a fork of AuthWP focused on staff-only wiki access.
+It keeps WordPress-backed authentication but restricts who can sign in
+to MediaWiki.
+
 - A valid WordPress session allows access to MediaWiki.
   Authenticating to MediaWiki with WordPress credentials signs the
   user in to WordPress.
@@ -23,17 +27,27 @@ provide essentially the same functionality using `SessionManager` and
   MediaWiki requires a different set of attributes for its users
   (<i>e.g.</i> group membership and number of edits), it is not
   possible to do away with the MediaWiki accounts entirely.
-- It is also possible to simultaneously create accounts in WordPress
-  when users register for the wiki. Because this will use WordPress
-  default values for all user attributes not supplied during the
-  MediaWiki registration process, users may end up with <i>e.g.</i>
-  empty email addresses. This is a potential problem because
-  WordPress assumes email addresses are unique user identifiers.
+- In this fork, MediaWiki registration is disabled. Users must already
+  have WordPress accounts.
 
 See the
 MediaWiki
 [Extension page](https://www.mediawiki.org/wiki/Extension:AuthWP) for
 further documentation.
+
+## Fork-specific authentication behavior
+
+This fork adds two policy controls:
+
+- Registration restriction: MediaWiki-side account registration is
+  disabled.
+- Role-filtered login: MediaWiki sign-in is allowed only when the
+  authenticated WordPress user has at least one configured allowed
+  role.
+
+If an existing WordPress user signs in successfully and passes role
+checks, MediaWiki can still auto-create the corresponding local wiki
+account on first login.
 
 ## Restricting login to staff roles
 
@@ -49,7 +63,3 @@ $wgAuthWPAllowedRoles = [ 'administrator', 'editor' ];
 
 If `AuthWPAllowedRoles` is empty (the default), role-based access
 restriction is disabled.
-
-MediaWiki-side account registration is disabled by this extension.
-Users must have a WordPress account and sign in via WordPress
-credentials.
