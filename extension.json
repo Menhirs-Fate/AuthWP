@@ -11,7 +11,8 @@
     },
     "config": {
         "AuthWPPath":  "..",
-        "AuthWPPriority": "100"
+        "AuthWPPriority": "100",
+        "AuthWPAllowedRoles": []
     },
     "AuthManagerAutoConfig": {
         "primaryauth": {

@@ -47,6 +47,21 @@ require_once $WP_relpath . DIRECTORY_SEPARATOR . 'wp-load.php';
 class AuthWPAuthenticationProvider extends
     AbstractPasswordPrimaryAuthenticationProvider {
 
+    private function is_role_allowed( $wp_user ) {
+        $allowedRoles = MediaWikiServices::getInstance()
+            ->getConfigFactory()
+            ->makeConfig( 'AuthWP' )
+            ->get( 'AuthWPAllowedRoles' );
+
+        if ( !$allowedRoles || !is_array( $allowedRoles ) ) {
+            // Backward-compatible default: if no allowlist is configured,
+            // do not restrict access by role.
+            return true;
+        }
+
+        return (bool)array_intersect( (array)$allowedRoles, (array)$wp_user->roles );
+    }
+
     // Automatically create an account when asked to log in a
     // WordPress user that does not exist in MediaWiki.
     public function accountCreationType() {
@@ -58,27 +73,9 @@ class AuthWPAuthenticationProvider extends
     // notification.
     public function beginPrimaryAccountCreation(
         $user, $creator, array $reqs ) {
-
-        $req_password = AuthenticationRequest::getRequestByClass(
-            $reqs, PasswordAuthenticationRequest::class );
-        $req_userData = AuthenticationRequest::getRequestByClass(
-            $reqs, UserDataAuthenticationRequest::class );
-
-        $user_id = wp_insert_user( [
-            'display_name' => $req_userData->realname,
-            'user_email' => $req_userData->email,
-            'user_login' => $req_password->username,
-            'user_pass' => $req_password->password
-        ] );
-        if ( is_wp_error( $user_id ) ) {
-            return $this->failResponse( $req_password );
-        }
-
-        $notify = Sanitizer::validateEmail(
-            $req_userData->email ) ? 'both' : 'admin';
-        wp_send_new_user_notifications( $user_id, $notify );
-
-        return $this->beginPrimaryAuthentication( $reqs );
+        return AuthenticationResponse::newFail(
+            wfMessage( 'authwp-registration-disabled' )
+        );
     }
 
 
@@ -110,6 +107,15 @@ class AuthWPAuthenticationProvider extends
                 if ( is_wp_error( wp_signon( $creds, true ) ) ) {
                     return $this->failResponse( $req_password );
                 }
+
+                $wp_user = wp_get_current_user();
+                if ( !$wp_user || !$wp_user->exists() || !$this->is_role_allowed( $wp_user ) ) {
+                    wp_logout();
+                    return AuthenticationResponse::newFail(
+                        wfMessage( 'authwp-staff-only' )
+                    );
+                }
+
                 return AuthenticationResponse::newPass(
                     $req_password->username );
 

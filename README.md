@@ -33,3 +33,22 @@ See the
 MediaWiki
 [Extension page](https://www.mediawiki.org/wiki/Extension:AuthWP) for
 further documentation.
+
+## Restricting login to staff roles
+
+This extension can be configured to allow MediaWiki sign-in only for
+specific WordPress roles. Users without one of the allowed roles are
+denied sign-in with a "staff only" message.
+
+In your LocalSettings.php:
+
+```php
+$wgAuthWPAllowedRoles = [ 'administrator', 'editor' ];
+```
+
+If `AuthWPAllowedRoles` is empty (the default), role-based access
+restriction is disabled.
+
+MediaWiki-side account registration is disabled by this extension.
+Users must have a WordPress account and sign in via WordPress
+credentials.

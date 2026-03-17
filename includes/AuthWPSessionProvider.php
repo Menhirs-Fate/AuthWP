@@ -41,6 +41,21 @@ require_once $WP_relpath . DIRECTORY_SEPARATOR . 'wp-load.php';
 
 
 class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
+    private function is_role_allowed( $wp_user ) {
+        $allowedRoles = MediaWikiServices::getInstance()
+            ->getConfigFactory()
+            ->makeConfig( 'AuthWP' )
+            ->get( 'AuthWPAllowedRoles' );
+
+        if ( !$allowedRoles || !is_array( $allowedRoles ) ) {
+            // Backward-compatible default: if no allowlist is configured,
+            // do not restrict access by role.
+            return true;
+        }
+
+        return (bool)array_intersect( (array)$allowedRoles, (array)$wp_user->roles );
+    }
+
     public function __construct( $params = [] ) {
         parent::__construct( $params );
 
@@ -81,6 +96,11 @@ class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
         // session information instead.
         $wp_user = wp_get_current_user();
         if ( !$wp_user || !$wp_user->exists() ) {
+            return null;
+        }
+        if ( !$this->is_role_allowed( $wp_user ) ) {
+            // User is signed in to WordPress but is not staff; do not
+            // establish a MediaWiki session.
             return null;
         }
         $wp_user_login = $this->userNameUtils->getCanonical(
