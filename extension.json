@@ -1,7 +1,7 @@
 {
-  "name": "AuthWP",
+  "name": "AuthWP-MF",
   "version": "0.0.2",
-  "author": ["Johan Hattne"],
+  "author": ["Johan Hattne", "Dan Boyes - Tawa Group"],
   "descriptionmsg": "authwp-desc",
   "license-name": "MIT",
   "type": "other",
