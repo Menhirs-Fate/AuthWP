@@ -1,7 +1,7 @@
 {
-    "authwp-desc": "Provides WordPress login integration",
-    "authwp-invalid-priority": "Invalid priority",
-    "authwp-no-wordpress-user": "No corresponding WordPress user: cannot auto-create",
-    "authwp-registration-disabled": "Account registration is disabled. Please use your WordPress account to sign in.",
-    "authwp-staff-only": "This login is for staff only."
+  "authwp-desc": "Provides WordPress login integration",
+  "authwp-invalid-priority": "Invalid priority",
+  "authwp-no-wordpress-user": "No corresponding WordPress user: cannot auto-create",
+  "authwp-registration-disabled": "Account registration is disabled. Please use your WordPress account to sign in.",
+  "authwp-staff-only": "This login is for staff only."
 }
