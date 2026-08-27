@@ -72,6 +72,44 @@ class AuthWPSSOContinueRequest extends AuthenticationRequest {
     }
 }
 
+/**
+ * Presentation fixes for the login form.
+ */
+class AuthWPSSOHooks {
+
+    /**
+     * Make the SSO button read as the alternative route rather than a second
+     * primary call to action.
+     *
+     * This has to happen here rather than on the request itself:
+     * AuthManagerSpecialPage::fieldInfoToFormDescriptor() hard-codes
+     * primary/progressive styling for auth buttons, discarding any 'flags'
+     * the AuthenticationRequest sets. AuthChangeFormFields runs after that
+     * conversion, so it is the only place the value survives.
+     *
+     * @param array  $requests
+     * @param array  $fieldInfo
+     * @param array &$formDescriptor
+     * @param string $action
+     */
+    public static function onAuthChangeFormFields(
+        $requests, $fieldInfo, &$formDescriptor, $action
+    ) {
+        if ( $action !== AuthManager::ACTION_LOGIN
+            || !isset( $formDescriptor['authwpsso'] ) ) {
+            return;
+        }
+
+        // Progressive but not primary: outlined rather than filled.
+        $formDescriptor['authwpsso']['flags'] = [ 'progressive' ];
+
+        // Sort below the password form's own submit button, so the page reads
+        // "log in with your wiki password" first, "or use your website
+        // account" second - rather than two identical buttons side by side.
+        $formDescriptor['authwpsso']['weight'] = 200;
+    }
+}
+
 class AuthWPSSOProvider extends AbstractPrimaryAuthenticationProvider {
 
     /** Session key holding the CSRF state we generated. */

@@ -448,8 +448,17 @@ class AuthWPAuthenticationProvider extends
             }
         }
 
-        return AuthenticationResponse::newPass(
-            $req_password->username );
+        // No usable PasswordAuthenticationRequest in $reqs. This is reached
+        // when the login attempt is not password-based at all - for example
+        // the SSO button, which submits no username or password.
+        //
+        // This previously fell through to newPass( $req_password->username )
+        // with $req_password === null, i.e. PASS with a null username, which
+        // AuthManager answers with authmanager-authn-no-local-user and a
+        // RESTART. That silently hijacked every non-password login attempt
+        // before any other provider could see it. Every branch inside the
+        // guard above returns, so abstaining is the only correct answer here.
+        return AuthenticationResponse::newAbstain();
     }
 
 

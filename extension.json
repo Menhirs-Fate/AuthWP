@@ -48,6 +48,7 @@
         "AuthWPSSOProvider": "includes/AuthWPSSO.php",
         "AuthWPSSOBeginRequest": "includes/AuthWPSSO.php",
         "AuthWPSSOContinueRequest": "includes/AuthWPSSO.php",
+        "AuthWPSSOHooks": "includes/AuthWPSSO.php",
         "SpecialAuthWPReturn": "includes/SpecialAuthWPReturn.php"
     },
     "ConfigRegistry": {
@@ -55,7 +56,8 @@
     },
     "Hooks": {
         "UserLogout": ["AuthWPSessionProvider::onUserLogout"],
-        "LoadExtensionSchemaUpdates": ["AuthWPSchemaHooks::onLoadExtensionSchemaUpdates"]
+        "LoadExtensionSchemaUpdates": ["AuthWPSchemaHooks::onLoadExtensionSchemaUpdates"],
+        "AuthChangeFormFields": ["AuthWPSSOHooks::onAuthChangeFormFields"]
     },
     "MessagesDirs": {
         "AuthWP": ["i18n"]
