@@ -4,7 +4,7 @@
  * Plugin URI:  https://github.com/Menhirs-Fate/AuthWP
  * Description: Exposes WordPress authentication as a REST API for remote
  *              MediaWiki AuthWP integration. Secured with a shared secret.
- * Version:     1.2.0
+ * Version:     1.3.0
  * Author:      Dan Boyes - Tawa Group
  * License:     MIT
  */
@@ -40,6 +40,20 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   // Capability checks (manage_options / edit_users / promote_users)
  *   // already block admin-like roles; this is an extra explicit deny-list.
  *   // define( 'AUTHWP_PROTECTED_ROLES', [ 'administrator', 'shop_manager' ] );
+ *
+ *   // ---- SSO redirect flow (v1.3.0) ----
+ *   //
+ *   // Required for SSO. Exact URIs the flow may hand control back to.
+ *   // Comma-separated string or array. Matched by EXACT string comparison:
+ *   // no wildcards, no prefix matching. A loose match here is an open
+ *   // redirect, which in an auth flow means handing codes to an attacker.
+ *   define( 'AUTHWP_SSO_REDIRECT_URIS',
+ *       'https://wiki.menhirsfate.com/index.php?title=Special:AuthWPReturn' );
+ *
+ *   // Optional. Lifetime of a one-time SSO code, in seconds.
+ *   // Default 120. Clamped to 30..600. Shorter is better: the code is a
+ *   // bearer credential in transit through the user's browser.
+ *   // define( 'AUTHWP_SSO_CODE_TTL', 120 );
  */
 
 class AuthWP_REST_Bridge {
@@ -48,6 +62,13 @@ class AuthWP_REST_Bridge {
 
     public function __construct() {
         add_action( 'rest_api_init', [ $this, 'register_routes' ] );
+
+        // Browser-facing SSO entry point. NOT protected by the shared secret
+        // or the IP allow-list: the caller here is the end user's browser,
+        // not the wiki server. Its security comes from requiring a logged-in
+        // WordPress session (which is what forces password + 2FA) and from
+        // the exact-match redirect_uri allow-list.
+        add_action( 'init', [ $this, 'maybe_handle_sso_start' ] );
     }
 
     /* ------------------------------------------------------------------ */
@@ -82,6 +103,17 @@ class AuthWP_REST_Bridge {
         register_rest_route( self::NAMESPACE_V1, '/change-password', [
             'methods'             => 'POST',
             'callback'            => [ $this, 'handle_change_password' ],
+            'permission_callback' => [ $this, 'verify_secret' ],
+        ] );
+
+        // POST /wp-json/authwp/v1/sso-exchange
+        // Server-to-server only. MediaWiki redeems a one-time code minted by
+        // maybe_handle_sso_start() for the identity behind it. No password is
+        // ever sent, so 2FA is never bypassed - it was already satisfied on
+        // WordPress's own login form before the code existed.
+        register_rest_route( self::NAMESPACE_V1, '/sso-exchange', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'handle_sso_exchange' ],
             'permission_callback' => [ $this, 'verify_secret' ],
         ] );
     }
@@ -143,6 +175,15 @@ class AuthWP_REST_Bridge {
      *  3. Fall back to regular wp_authenticate() for sites without 2FA.
      */
     public function handle_authenticate( WP_REST_Request $request ) {
+        // As a REST route this bypasses WordPress's own login-page throttling
+        // and any security plugin hooked to wp-login.php, so it needs its own.
+        // Without this the endpoint is an unlimited credential-testing oracle
+        // for anyone who reaches it.
+        if ( ! $this->rate_limit_ok( 'auth', 20, 300 ) ) {
+            return new WP_Error( 'authwp_rate_limited',
+                'Too many attempts.', [ 'status' => 429 ] );
+        }
+
         $identifier = sanitize_user( $request->get_param( 'username' ) );
         $password   = $request->get_param( 'password' );
 
@@ -322,6 +363,203 @@ class AuthWP_REST_Bridge {
         return new WP_REST_Response( [
             'success' => true,
         ], 200 );
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SSO redirect flow                                                 */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Step 1: GET /?authwp_sso=1&redirect_uri=<uri>&state=<opaque>
+     *
+     * If the visitor has no WordPress session they are bounced to
+     * wp-login.php and returned here afterwards, so the password and any 2FA
+     * challenge happen on WordPress's own login form. We never see either.
+     * Once a session exists, mint a single-use code bound to that user and
+     * hand control back to the wiki.
+     */
+    public function maybe_handle_sso_start() {
+        if ( ! isset( $_GET['authwp_sso'] ) ) {
+            return;
+        }
+
+        // Never let a page cache or CDN serve this: the response carries a
+        // one-time code and is specific to one visitor's session.
+        nocache_headers();
+
+        // PHP has already URL-decoded $_GET once. Do NOT decode again: a
+        // redirect_uri legitimately containing an encoded character (e.g.
+        // %3A in "Special:AuthWPReturn") would be decoded twice and then
+        // fail the exact-match allow-list below for no visible reason.
+        $redirect_uri = isset( $_GET['redirect_uri'] )
+            ? wp_unslash( $_GET['redirect_uri'] )
+            : '';
+        $state = isset( $_GET['state'] )
+            ? sanitize_text_field( wp_unslash( $_GET['state'] ) )
+            : '';
+
+        if ( ! $this->is_redirect_uri_allowed( $redirect_uri ) ) {
+            $this->log( 'sso: rejected redirect_uri "' . $redirect_uri . '"' );
+            wp_die( 'Invalid SSO redirect target.', 'AuthWP SSO', [ 'response' => 400 ] );
+        }
+
+        // The state is opaque to us. We only echo it back so the wiki can
+        // match it against the value it stored in the user's session - that
+        // is what stops a third party from starting a login for someone else.
+        if ( strlen( $state ) < 16 || strlen( $state ) > 128
+            || ! preg_match( '/^[A-Za-z0-9_-]+$/', $state ) ) {
+            wp_die( 'Invalid SSO state.', 'AuthWP SSO', [ 'response' => 400 ] );
+        }
+
+        if ( ! is_user_logged_in() ) {
+            // add_query_arg() encodes the values itself, so pass the raw URI.
+            // Pre-encoding here would round-trip as a double-encoded value.
+            $self = add_query_arg(
+                [
+                    'authwp_sso'   => '1',
+                    'redirect_uri' => $redirect_uri,
+                    'state'        => $state,
+                ],
+                home_url( '/' )
+            );
+            wp_safe_redirect( wp_login_url( $self ) );
+            exit;
+        }
+
+        $user = wp_get_current_user();
+        if ( ! $user || ! $user->exists() ) {
+            wp_die( 'No WordPress user in session.', 'AuthWP SSO', [ 'response' => 403 ] );
+        }
+
+        $code = wp_generate_password( 64, false, false );
+
+        // Stored HASHED: a leaked options/transient dump then yields nothing
+        // usable, for the same reason you never store a raw session id.
+        set_transient(
+            self::sso_transient_key( $code ),
+            [ 'user_id' => (int) $user->ID, 'state' => $state ],
+            self::sso_ttl()
+        );
+
+        $this->log( sprintf( 'sso: issued code for "%s" (id %d)',
+            $user->user_login, $user->ID ) );
+
+        // Deliberately wp_redirect(), not wp_safe_redirect(): the target is
+        // another host by design. Safety comes from the exact-match
+        // allow-list already checked above.
+        wp_redirect( add_query_arg(
+            [ 'code' => $code, 'state' => $state ],
+            $redirect_uri
+        ) );
+        exit;
+    }
+
+    /**
+     * Step 2: POST /sso-exchange  { code, state }
+     *
+     * Server-to-server, behind the shared secret and IP allow-list. Redeems
+     * a code for the identity it was minted for.
+     */
+    public function handle_sso_exchange( WP_REST_Request $request ) {
+        if ( ! $this->rate_limit_ok( 'sso', 30, 300 ) ) {
+            return new WP_Error( 'authwp_rate_limited',
+                'Too many attempts.', [ 'status' => 429 ] );
+        }
+
+        $code  = (string) $request->get_param( 'code' );
+        $state = (string) $request->get_param( 'state' );
+
+        if ( $code === '' ) {
+            return new WP_REST_Response(
+                [ 'authenticated' => false, 'error' => 'Missing code.' ], 400 );
+        }
+
+        $key  = self::sso_transient_key( $code );
+        $data = get_transient( $key );
+
+        // Deleted FIRST and unconditionally. The code is single-use even when
+        // what follows fails, so nothing below can be retried or replayed.
+        delete_transient( $key );
+
+        if ( ! is_array( $data ) ) {
+            return new WP_REST_Response(
+                [ 'authenticated' => false, 'error' => 'Invalid or expired code.' ], 401 );
+        }
+
+        if ( ! hash_equals( (string) $data['state'], $state ) ) {
+            $this->log( 'sso-exchange: state mismatch' );
+            return new WP_REST_Response(
+                [ 'authenticated' => false, 'error' => 'State mismatch.' ], 401 );
+        }
+
+        $user = get_user_by( 'id', (int) $data['user_id'] );
+        if ( ! $user ) {
+            return new WP_REST_Response(
+                [ 'authenticated' => false, 'error' => 'User no longer exists.' ], 404 );
+        }
+
+        $this->log( sprintf( 'sso-exchange: redeemed for "%s" (id %d)',
+            $user->user_login, $user->ID ) );
+
+        return new WP_REST_Response( [
+            'authenticated' => true,
+            'user'          => $this->format_user( $user ),
+        ], 200 );
+    }
+
+    private static function sso_transient_key( $code ) {
+        return 'authwp_sso_' . hash( 'sha256', $code );
+    }
+
+    private static function sso_ttl() {
+        $ttl = defined( 'AUTHWP_SSO_CODE_TTL' ) ? (int) AUTHWP_SSO_CODE_TTL : 120;
+        return max( 30, min( 600, $ttl ) );
+    }
+
+    /**
+     * Exact string match only. Note this fails CLOSED when the constant is
+     * undefined - unlike AUTHWP_ALLOWED_IPS, which stays open for backward
+     * compatibility. A permissive default here would be an open redirect in
+     * an authentication flow, which is not a tradeoff worth making.
+     */
+    private function is_redirect_uri_allowed( $uri ) {
+        if ( $uri === '' || ! defined( 'AUTHWP_SSO_REDIRECT_URIS' )
+            || empty( AUTHWP_SSO_REDIRECT_URIS ) ) {
+            return false;
+        }
+
+        $allowed = AUTHWP_SSO_REDIRECT_URIS;
+        if ( is_string( $allowed ) ) {
+            $allowed = array_map( 'trim', explode( ',', $allowed ) );
+        }
+
+        foreach ( (array) $allowed as $candidate ) {
+            if ( $candidate !== '' && hash_equals( (string) $candidate, $uri ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Crude per-IP throttle backed by transients. Enough to make brute force
+     * impractical on endpoints that would otherwise accept unlimited guesses.
+     */
+    private function rate_limit_ok( $bucket, $max, $window ) {
+        $ip  = $this->get_client_ip();
+        // Hashed only to make a fixed-length, option-name-safe key - this is
+        // a namespacing device, not a security control.
+        $key = 'authwp_rl_' . $bucket . '_'
+             . substr( hash( 'sha256', $ip ), 0, 32 );
+        $n   = (int) get_transient( $key );
+
+        if ( $n >= $max ) {
+            $this->log( sprintf( 'rate limit hit on "%s" from %s', $bucket, $ip ) );
+            return false;
+        }
+
+        set_transient( $key, $n + 1, $window );
+        return true;
     }
 
     /* ------------------------------------------------------------------ */
