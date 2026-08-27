@@ -16,7 +16,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
  * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
  * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
@@ -30,14 +30,14 @@ use MediaWiki\Session\UserInfo;
 use MediaWiki\User\UserRigorOptions;
 
 
-// Bootstrap WordPress using the relative path to its installation
-// directory.  The default value, '..', implies that MediaWiki is
-// installed in a directory next to WordPress's wp-load.php.
-$WP_relpath = MediaWikiServices::getInstance()
-            ->getConfigFactory()
-            ->makeConfig( 'AuthWP' )
-            ->get( 'AuthWPPath' );
-require_once $WP_relpath . DIRECTORY_SEPARATOR . 'wp-load.php';
+// Bootstrap WordPress only in local mode.
+if ( !AuthWPRestClient::isRestMode() ) {
+    $WP_relpath = MediaWikiServices::getInstance()
+        ->getConfigFactory()
+        ->makeConfig( 'AuthWP' )
+        ->get( 'AuthWPPath' );
+    require_once $WP_relpath . DIRECTORY_SEPARATOR . 'wp-load.php';
+}
 
 
 class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
@@ -48,8 +48,6 @@ class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
             ->get( 'AuthWPAllowedRoles' );
 
         if ( !$allowedRoles || !is_array( $allowedRoles ) ) {
-            // Backward-compatible default: if no allowlist is configured,
-            // do not restrict access by role.
             return true;
         }
 
@@ -60,11 +58,11 @@ class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
         parent::__construct( $params );
 
         $this->priority = MediaWikiServices::getInstance()
-                        ->getConfigFactory()
-                        ->makeConfig( 'AuthWP' )
-                        ->get( 'AuthWPPriority' );
+            ->getConfigFactory()
+            ->makeConfig( 'AuthWP' )
+            ->get( 'AuthWPPriority' );
         if ( $this->priority < SessionInfo::MIN_PRIORITY ||
-             $this->priority > SessionInfo::MAX_PRIORITY ) {
+            $this->priority > SessionInfo::MAX_PRIORITY ) {
             throw new \InvalidArgumentException(
                 __METHOD__ . ': ' . wfMessage( 'authwp-invalid-priority' ) );
         }
@@ -80,6 +78,10 @@ class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
     // Log out user from WordPress early, possibly before MediaWiki
     // logout completes.
     public static function onUserLogout( &$user ) {
+        // In REST mode we cannot call wp_logout() — just return.
+        if ( AuthWPRestClient::isRestMode() ) {
+            return true;
+        }
         wp_logout();
         return true;
     }
@@ -87,43 +89,39 @@ class AuthWPSessionProvider extends ImmutableSessionProviderWithCookie {
 
     // If a WordPress session for the request exists, return a
     // SessionInfo object to identify the session, otherwise return
-    // null.  This allows users already signed in to WordPress to be
+    // null. This allows users already signed in to WordPress to be
     // automatically signed in to MediaWiki.
     public function provideSessionInfo( WebRequest $request ) {
-        // Get the canonical name corresponding to the user logged in
-        // to WordPress.  If there is no logged-in WordPress user, a
-        // downstream session provider will have to provide the
-        // session information instead.
+        // In REST (cross-server) mode, WordPress cookies are not
+        // available on this server, so automatic session bridging
+        // is not possible. Users must log in via the MediaWiki
+        // login form, which uses the AuthenticationProvider.
+        if ( AuthWPRestClient::isRestMode() ) {
+            return null;
+        }
+
+        // ---- LOCAL MODE (original behaviour) ----
+
         $wp_user = wp_get_current_user();
         if ( !$wp_user || !$wp_user->exists() ) {
             return null;
         }
         if ( !$this->is_role_allowed( $wp_user ) ) {
-            // User is signed in to WordPress but is not staff; do not
-            // establish a MediaWiki session.
             return null;
         }
         $wp_user_login = $this->userNameUtils->getCanonical(
             $wp_user->user_login, UserRigorOptions::RIGOR_USABLE );
 
 
-        // Clear the UserID cookie if the corresponding username
-        // matches the name of the logged-in WordPress user.  This
-        // will prevent downstream session providers from validating
-        // the sessions of users after they log out from WordPress.
-        // Do not clear the UserName cookie, because it is used to
-        // populate the "Username" field on MediaWiki's "Log in" page.
         $userID = $request->getCookie( 'UserID' );
         if ( $userID !== null ) {
             if ( UserInfo::newFromId( $userID )
-                 ->getName() === $wp_user_login ) {
+                ->getName() === $wp_user_login ) {
                 $request->response()->clearCookie( 'UserID' );
             }
         }
 
 
-        // From
-        // https://www.mediawiki.org/wiki/Manual:SessionManager_and_AuthManager/SessionProvider_examples.
         $userInfo = UserInfo::newFromName( $wp_user_login, true );
 
         if ( $this->sessionCookieName === null ) {

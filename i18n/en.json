@@ -1,7 +1,44 @@
 {
-  "authwp-desc": "Provides WordPress login integration",
-  "authwp-invalid-priority": "Invalid priority",
-  "authwp-no-wordpress-user": "No corresponding WordPress user: cannot auto-create",
-  "authwp-registration-disabled": "Account registration is disabled. Please use your WordPress account to sign in.",
-  "authwp-staff-only": "This login is for staff only."
+    "@metadata": {
+        "authors": ["AuthWP"]
+    },
+    "authwp-desc": "Authenticate MediaWiki users against a WordPress installation, with username change request support.",
+    "authwp-registration-disabled": "Registration through this wiki is disabled. Please register on the main website.",
+    "authwp-staff-only": "Your WordPress role does not have access to this wiki.",
+    "authwp-no-wordpress-user": "No matching WordPress account found.",
+    "authwp-unknown-user": "We couldn't find an account with that username. Please sign in with the username or email address you use on menhirsfate.com.",
+    "authwp-bridge-error": "The login service is temporarily unavailable. Please try again in a few minutes, and contact the team if the problem persists.",
+
+    "requestusernamechange": "Request username change",
+    "manageusernamerequests": "Manage username requests",
+
+    "authwp-rename-mustlogin": "You must be logged in to request a username change.",
+    "authwp-rename-request-title": "Request a username change",
+    "authwp-rename-request-intro": "Your current username is '''$1'''. Use this form to request a new wiki username. An administrator will review your request.",
+    "authwp-rename-already-pending": "You already have a pending request to change your name to '''$1''' (submitted $2). Please wait for an administrator to review it.",
+    "authwp-rename-newname": "Desired new username:",
+    "authwp-rename-reason": "Reason (optional):",
+    "authwp-rename-submit": "Submit request",
+    "authwp-rename-empty": "Please enter a username.",
+    "authwp-rename-invalid": "That username contains invalid characters.",
+    "authwp-rename-taken": "The username \"$1\" is already taken.",
+    "authwp-rename-same": "That is already your current username.",
+    "authwp-rename-request-success": "Your request to change your username to '''$1''' has been submitted. An administrator will review it shortly.",
+
+    "authwp-rename-manage-title": "Manage username change requests",
+    "authwp-rename-no-requests": "There are no username change requests.",
+    "authwp-rename-pending-header": "Pending requests",
+    "authwp-rename-resolved-header": "Recent resolved requests",
+    "authwp-rename-requested-on": "Requested:",
+    "authwp-rename-reason-label": "Reason:",
+    "authwp-rename-admin-comment": "Comment:",
+    "authwp-rename-approve": "Approve",
+    "authwp-rename-deny": "Deny",
+    "authwp-rename-not-found": "Request not found or already resolved.",
+    "authwp-rename-no-renameuser": "The RenameUser extension is not installed. Cannot process renames.",
+    "authwp-rename-user-gone": "User \"$1\" no longer exists.",
+    "authwp-rename-failed": "The rename operation failed. Check the server logs for details.",
+    "authwp-rename-approved-success": "Username change approved: '''$1''' has been renamed to '''$2'''. The WordPress login mapping has been saved.",
+    "authwp-rename-denied-success": "Username change request from '''$1''' to '''$2''' has been denied.",
+    "authwp-rename-log-reason": "Username change approved via AuthWP. $1"
 }

@@ -1,45 +1,57 @@
 {
-  "name": "AuthWP-MF",
-  "version": "0.0.2",
-  "author": ["Johan Hattne", "Dan Boyes - Tawa Group"],
-  "descriptionmsg": "authwp-desc",
-  "license-name": "MIT",
-  "type": "other",
-  "url": "https://www.mediawiki.org/wiki/Extension:AuthWP",
-  "requires": {
-    "MediaWiki": ">= 1.35"
-  },
-  "config": {
-    "AuthWPPath": "..",
-    "AuthWPPriority": "100",
-    "AuthWPAllowedRoles": []
-  },
-  "AuthManagerAutoConfig": {
-    "primaryauth": {
-      "AuthWPAuthenticationProvider": {
-        "class": "AuthWPAuthenticationProvider",
-        "args": []
-      }
-    }
-  },
-  "AutoloadClasses": {
-    "AuthWPAuthenticationProvider": "includes/AuthWPAuthenticationProvider.php",
-    "AuthWPSessionProvider": "includes/AuthWPSessionProvider.php"
-  },
-  "ConfigRegistry": {
-    "AuthWP": "GlobalVarConfig::newInstance"
-  },
-  "Hooks": {
-    "UserLogout": ["AuthWPSessionProvider::onUserLogout"]
-  },
-  "MessagesDirs": {
-    "AuthWP": ["i18n"]
-  },
-  "SessionProviders": {
-    "AuthWPSessionProvider": {
-      "class": "AuthWPSessionProvider",
-      "args": []
-    }
-  },
-  "manifest_version": 1
+    "name": "AuthWP-MF",
+    "version": "0.2.1",
+    "author": ["Johan Hattne", "Dan Boyes - Tawa Group"],
+    "descriptionmsg": "authwp-desc",
+    "license-name": "MIT",
+    "type": "other",
+    "url": "https://www.mediawiki.org/wiki/Extension:AuthWP",
+    "requires": {
+        "MediaWiki": ">= 1.39"
+    },
+    "config": {
+        "AuthWPPath": "..",
+        "AuthWPPriority": "100",
+        "AuthWPAllowedRoles": [],
+        "AuthWPApiUrl": "",
+        "AuthWPApiSecret": "",
+        "AuthWPRoleMap": {}
+    },
+    "AuthManagerAutoConfig": {
+        "primaryauth": {
+            "AuthWPAuthenticationProvider": {
+                "class": "AuthWPAuthenticationProvider",
+                "args": []
+            }
+        }
+    },
+    "SpecialPages": {
+        "RequestUsernameChange": "SpecialRequestUsernameChange",
+        "ManageUsernameRequests": "SpecialManageUsernameRequests"
+    },
+    "AutoloadClasses": {
+        "AuthWPRestClient": "includes/AuthWPAuthenticationProvider.php",
+        "AuthWPAuthenticationProvider": "includes/AuthWPAuthenticationProvider.php",
+        "AuthWPSessionProvider": "includes/AuthWPSessionProvider.php",
+        "SpecialRequestUsernameChange": "includes/SpecialRequestUsernameChange.php",
+        "SpecialManageUsernameRequests": "includes/SpecialManageUsernameRequests.php",
+        "AuthWPSchemaHooks": "includes/AuthWPSchemaHooks.php"
+    },
+    "ConfigRegistry": {
+        "AuthWP": "GlobalVarConfig::newInstance"
+    },
+    "Hooks": {
+        "UserLogout": ["AuthWPSessionProvider::onUserLogout"],
+        "LoadExtensionSchemaUpdates": ["AuthWPSchemaHooks::onLoadExtensionSchemaUpdates"]
+    },
+    "MessagesDirs": {
+        "AuthWP": ["i18n"]
+    },
+    "SessionProviders": {
+        "AuthWPSessionProvider": {
+            "class": "AuthWPSessionProvider",
+            "args": []
+        }
+    },
+    "manifest_version": 1
 }
