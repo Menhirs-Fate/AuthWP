@@ -164,6 +164,55 @@ class AuthWPRestClient {
             'password' => $password,
         ] );
     }
+
+    /**
+     * POST /sso-exchange — redeem a one-time SSO code for an identity.
+     *
+     * Used by the redirect flow, where the user has already authenticated
+     * (password + 2FA) on WordPress's own login form. No credentials are
+     * sent here; the code is a short-lived, single-use bearer token that
+     * WordPress minted for an already-established session.
+     *
+     * @param string $code  One-time code returned via the browser redirect
+     * @param string $state Opaque value we generated, echoed back by WordPress
+     * @return array|null   ['authenticated'=>bool,'user'=>[...]] or null on
+     *                      transport failure (bridge unreachable / bad secret)
+     */
+    public static function ssoExchange( $code, $state ) {
+        return self::request( 'POST', '/sso-exchange', [
+            'code'  => $code,
+            'state' => $state,
+        ] );
+    }
+
+    /**
+     * Base URL of the WordPress site for starting the SSO redirect flow.
+     * Falls back to deriving the site root from the REST API URL, so an
+     * existing install does not have to set a second constant.
+     *
+     * @return string|null
+     */
+    public static function ssoStartUrl() {
+        $config = MediaWikiServices::getInstance()
+            ->getConfigFactory()->makeConfig( 'AuthWP' );
+
+        if ( $config->has( 'AuthWPSSOStartUrl' ) ) {
+            $explicit = $config->get( 'AuthWPSSOStartUrl' );
+            if ( $explicit ) {
+                return $explicit;
+            }
+        }
+
+        // Derive: https://site/wp-json/authwp/v1  ->  https://site/
+        self::isRestMode();
+        if ( !self::$apiUrl ) {
+            return null;
+        }
+        $pos = strpos( self::$apiUrl, '/wp-json' );
+        return $pos === false
+            ? null
+            : substr( self::$apiUrl, 0, $pos ) . '/';
+    }
 }
 
 
@@ -207,6 +256,30 @@ class AuthWPAuthenticationProvider extends
     private static $lastAuthWpUsername = null;
 
     private function is_role_allowed_from_roles( array $roles ) {
+        // Delegates to the static implementation so the password path and the
+        // SSO path can never apply different role policy.
+        return self::isRoleAllowedFromRoles( $roles );
+    }
+
+    private function is_role_allowed( $wp_user ) {
+        return $this->is_role_allowed_from_roles( (array)$wp_user->roles );
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Accessors for the SSO redirect provider                            */
+    /*                                                                     */
+    /*  AuthWPSSOProvider is a separate provider but must apply exactly the */
+    /*  same role policy, rename mapping and group-sync as the password     */
+    /*  path. These expose that logic rather than duplicating it, so the    */
+    /*  two entry points cannot drift apart.                                */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Static form of the role check, for callers without an instance.
+     * @param array $roles WordPress role slugs
+     * @return bool
+     */
+    public static function isRoleAllowedFromRoles( array $roles ) {
         $allowedRoles = MediaWikiServices::getInstance()
             ->getConfigFactory()
             ->makeConfig( 'AuthWP' )
@@ -219,8 +292,26 @@ class AuthWPAuthenticationProvider extends
         return (bool)array_intersect( (array)$allowedRoles, $roles );
     }
 
-    private function is_role_allowed( $wp_user ) {
-        return $this->is_role_allowed_from_roles( (array)$wp_user->roles );
+    /**
+     * Public wrapper around the renamed-user mapping.
+     * @param string $wpUsername
+     * @return string MediaWiki username to log in as
+     */
+    public static function resolveRenamedUserPublic( $wpUsername ) {
+        return self::resolveRenamedUser( $wpUsername );
+    }
+
+    /**
+     * Seed the caches that postAuthentication() and testUserForCreation()
+     * read, so an SSO login syncs groups and auto-creates accounts using the
+     * same code path as a password login.
+     *
+     * @param string $wpUsername Resolved WordPress login
+     * @param array  $roles      WordPress role slugs
+     */
+    public static function rememberSsoContext( $wpUsername, array $roles ) {
+        self::$lastAuthWpUsername = $wpUsername;
+        self::$lastAuthRoles      = $roles;
     }
 
     public function accountCreationType() {

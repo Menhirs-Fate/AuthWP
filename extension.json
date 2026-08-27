@@ -1,6 +1,6 @@
 {
     "name": "AuthWP-MF",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "author": ["Johan Hattne", "Dan Boyes - Tawa Group"],
     "descriptionmsg": "authwp-desc",
     "license-name": "MIT",
@@ -15,19 +15,28 @@
         "AuthWPAllowedRoles": [],
         "AuthWPApiUrl": "",
         "AuthWPApiSecret": "",
-        "AuthWPRoleMap": {}
+        "AuthWPRoleMap": {},
+        "AuthWPSSOEnabled": false,
+        "AuthWPSSOStartUrl": ""
     },
     "AuthManagerAutoConfig": {
         "primaryauth": {
             "AuthWPAuthenticationProvider": {
                 "class": "AuthWPAuthenticationProvider",
-                "args": []
+                "args": [],
+                "sort": 100
+            },
+            "AuthWPSSOProvider": {
+                "class": "AuthWPSSOProvider",
+                "args": [],
+                "sort": 110
             }
         }
     },
     "SpecialPages": {
         "RequestUsernameChange": "SpecialRequestUsernameChange",
-        "ManageUsernameRequests": "SpecialManageUsernameRequests"
+        "ManageUsernameRequests": "SpecialManageUsernameRequests",
+        "AuthWPReturn": "SpecialAuthWPReturn"
     },
     "AutoloadClasses": {
         "AuthWPRestClient": "includes/AuthWPAuthenticationProvider.php",
@@ -35,7 +44,11 @@
         "AuthWPSessionProvider": "includes/AuthWPSessionProvider.php",
         "SpecialRequestUsernameChange": "includes/SpecialRequestUsernameChange.php",
         "SpecialManageUsernameRequests": "includes/SpecialManageUsernameRequests.php",
-        "AuthWPSchemaHooks": "includes/AuthWPSchemaHooks.php"
+        "AuthWPSchemaHooks": "includes/AuthWPSchemaHooks.php",
+        "AuthWPSSOProvider": "includes/AuthWPSSO.php",
+        "AuthWPSSOBeginRequest": "includes/AuthWPSSO.php",
+        "AuthWPSSOContinueRequest": "includes/AuthWPSSO.php",
+        "SpecialAuthWPReturn": "includes/SpecialAuthWPReturn.php"
     },
     "ConfigRegistry": {
         "AuthWP": "GlobalVarConfig::newInstance"

@@ -40,5 +40,12 @@
     "authwp-rename-failed": "The rename operation failed. Check the server logs for details.",
     "authwp-rename-approved-success": "Username change approved: '''$1''' has been renamed to '''$2'''. The WordPress login mapping has been saved.",
     "authwp-rename-denied-success": "Username change request from '''$1''' to '''$2''' has been denied.",
-    "authwp-rename-log-reason": "Username change approved via AuthWP. $1"
+    "authwp-rename-log-reason": "Username change approved via AuthWP. $1",
+    "authwp-sso-provider-name": "Menhirs Fate website",
+    "authwp-sso-button-label": "Log in with your Menhirs Fate account",
+    "authwp-sso-button-help": "You will be sent to menhirsfate.com to sign in, including two-factor authentication if you have it enabled, and returned here automatically.",
+    "authwp-sso-misconfigured": "Single sign-on is not configured correctly on this wiki. Please contact an administrator.",
+    "authwp-sso-failed": "Single sign-on did not complete. You were not signed in.",
+    "authwp-sso-state-mismatch": "This sign-in link is no longer valid. This usually means it was already used, it expired, or the sign-in was started in a different browser session.",
+    "authwp-sso-retry": "Please return to [[Special:UserLogin|the login page]] and try again."
 }

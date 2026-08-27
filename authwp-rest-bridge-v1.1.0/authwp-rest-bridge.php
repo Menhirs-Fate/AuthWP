@@ -47,8 +47,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   // Comma-separated string or array. Matched by EXACT string comparison:
  *   // no wildcards, no prefix matching. A loose match here is an open
  *   // redirect, which in an auth flow means handing codes to an attacker.
+ *   // Get the exact value from the wiki rather than guessing - it depends on
+ *   // $wgArticlePath. On this install it is the short-URL form:
  *   define( 'AUTHWP_SSO_REDIRECT_URIS',
- *       'https://wiki.menhirsfate.com/index.php?title=Special:AuthWPReturn' );
+ *       'https://wiki.menhirsfate.com/wiki/Special:AuthWPReturn' );
  *
  *   // Optional. Lifetime of a one-time SSO code, in seconds.
  *   // Default 120. Clamped to 30..600. Shorter is better: the code is a
