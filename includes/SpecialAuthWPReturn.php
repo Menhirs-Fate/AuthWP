@@ -13,10 +13,11 @@
  * needed to redeem it.
  */
 
+use MediaWiki\Auth\AuthenticationResponse;
 use MediaWiki\Auth\AuthManager;
 use MediaWiki\MediaWikiServices;
-use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\SpecialPage\UnlistedSpecialPage;
+use MediaWiki\Title\Title;
 
 class SpecialAuthWPReturn extends UnlistedSpecialPage {
 
@@ -85,14 +86,65 @@ class SpecialAuthWPReturn extends UnlistedSpecialPage {
         wfDebugLog( 'AuthWP', 'SSO return: code redeemed, resuming login for "'
             . ( $user['user_login'] ?? '?' ) . '"' );
 
-        // Back to Special:UserLogin, where AuthManager sees a pending flow and
-        // calls AuthWPSSOProvider::continuePrimaryAuthentication().
-        $returnTo = (string)$request->getVal( 'returnto', '' );
-        $query    = $returnTo !== '' ? [ 'returnto' => $returnTo ] : [];
+        // Complete the login here rather than redirecting to Special:UserLogin.
+        //
+        // A plain redirect does NOT resume a pending AuthManager flow: the
+        // login page simply renders a fresh form, so the user lands back where
+        // they started, still logged out and with no explanation. The
+        // continuation has to be driven explicitly.
+        $continueReq = new AuthWPSSOContinueRequest();
+        $continueReq->action = AuthManager::ACTION_LOGIN;
 
-        $this->getOutput()->redirect(
-            SpecialPage::getTitleFor( 'Userlogin' )->getFullURL( $query )
-        );
+        $response = $authManager->continueAuthentication( [ $continueReq ] );
+
+        if ( $response->status === AuthenticationResponse::PASS ) {
+            wfDebugLog( 'AuthWP', 'SSO return: login complete for "'
+                . $response->username . '"' );
+            $this->getOutput()->redirect( $this->successTarget() );
+            return;
+        }
+
+        if ( $response->status === AuthenticationResponse::FAIL ) {
+            wfDebugLog( 'AuthWP', 'SSO return: continuation failed - '
+                . ( $response->message ? $response->message->getKey() : 'no message' ) );
+            $out = $this->getOutput();
+            $out->setStatusCode( 403 );
+            if ( $response->message ) {
+                $out->addWikiMsg( $response->message->getKey() );
+            } else {
+                $out->addWikiMsg( 'authwp-sso-failed' );
+            }
+            $out->addWikiMsg( 'authwp-sso-retry' );
+            return;
+        }
+
+        // UI / REDIRECT / RESTART are not expected: our provider returns only
+        // PASS or FAIL from continuePrimaryAuthentication(). Report rather
+        // than silently bouncing the user back to a blank login form.
+        wfDebugLog( 'AuthWP', 'SSO return: unexpected continuation status '
+            . $response->status );
+        $this->fail( 'authwp-sso-failed' );
+    }
+
+    /**
+     * Where to send the user once they are logged in.
+     *
+     * The SSO round trip leaves the wiki entirely, so MediaWiki's usual
+     * returnto handling does not survive it. Honour an explicit returnto if
+     * one came back with the request, otherwise the main page - anything is
+     * better than redisplaying the login form to someone who just logged in.
+     *
+     * @return string
+     */
+    private function successTarget() {
+        $returnTo = (string)$this->getRequest()->getVal( 'returnto', '' );
+        if ( $returnTo !== '' ) {
+            $title = Title::newFromText( $returnTo );
+            if ( $title && $title->isKnown() ) {
+                return $title->getFullURL();
+            }
+        }
+        return Title::newMainPage()->getFullURL();
     }
 
     /**
